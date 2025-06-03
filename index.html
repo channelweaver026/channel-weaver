@@ -1,0 +1,132 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Channel Weaver</title>
+  <style>
+    body {
+      background: black;
+      color: white;
+      font-family: sans-serif;
+      text-align: center;
+      padding: 2em;
+    }
+    input, button {
+      margin: 0.5em;
+      padding: 0.5em;
+      border-radius: 8px;
+      font-size: 1em;
+    }
+    #videoPlayer video, #videoPlayer iframe {
+      width: 90%;
+      height: 500px;
+      margin-top: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>📺 Channel Weaver</h1>
+  <input id="Key" placeholder="e8ecdc59944240728f64525f1397276b" />
+  <input id="desc" placeholder="Describe your channel..." />
+  <button onclick="generateChannel()">Generate Channel</button>
+  <div id="videoPlayer"></div>
+  <ul id="playlist"></ul>
+
+  <script>
+    let playlist = [];
+    let currentIndex = 0;
+
+    function updatePlaylistDisplay() {
+      const list = document.getElementById("playlist");
+      list.innerHTML = "";
+      playlist.forEach((url, i) => {
+        const li = document.createElement("li");
+        li.textContent = (i === currentIndex ? "▶ " : "") + url;
+        list.appendChild(li);
+      });
+    }
+
+    function playVideo(url) {
+      const player = document.getElementById("videoPlayer");
+      player.innerHTML = "";
+
+      if (url.endsWith(".m3u8")) {
+        const video = document.createElement("video");
+        video.src = url;
+        video.controls = true;
+        video.autoplay = true;
+        video.onended = playNext;
+        player.appendChild(video);
+      } else if (url.includes("youtube.com") || url.includes("youtu.be") || url.includes("vimeo.com") || url.includes("peertube")) {
+        const iframe = document.createElement("iframe");
+        iframe.src = url.includes("watch?v=")
+          ? url.replace("watch?v=", "embed/") + "?autoplay=1"
+          : url + "?autoplay=1";
+        iframe.allow = "autoplay; fullscreen";
+        iframe.allowFullscreen = true;
+        player.appendChild(iframe);
+      } else {
+        const video = document.createElement("video");
+        video.src = url;
+        video.controls = true;
+        video.autoplay = true;
+        video.onended = playNext;
+        player.appendChild(video);
+      }
+    }
+
+    function playNext() {
+      if (currentIndex < playlist.length - 1) {
+        currentIndex++;
+        playVideo(playlist[currentIndex]);
+        updatePlaylistDisplay();
+      }
+    }
+
+    function playPrev() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        playVideo(playlist[currentIndex]);
+        updatePlaylistDisplay();
+      }
+    }
+
+    async function generateChannel() {
+      const desc = document.getElementById("desc").value.trim();
+      const aimlKey = document.getElementById("Key").value.trim();
+
+      if (!desc || !aimlKey) return alert("Description and AIMLAPI key required.");
+
+      const prompt = `Return a JSON array of 5 direct video URLs (YouTube, Vimeo, m3u8, PeerTube, or .mp4) based on this description: "${desc}". Only return the JSON array, no explanation.`;
+
+      try {
+        const res = await fetch("https://api.aimlapi.com/api/v1/completion", {
+          method: "POST",
+          headers: {
+            "Authorization": \`Bearer \${aimlKey}\`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "openai/gpt-4",
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+
+        const data = await res.json();
+        let raw = data.choices?.[0]?.message?.content?.trim() || "";
+
+        if (raw.startsWith("```json")) raw = raw.replace(/^```json|```$/g, "").trim();
+
+        playlist = JSON.parse(raw);
+        currentIndex = 0;
+        playVideo(playlist[0]);
+        updatePlaylistDisplay();
+      } catch (e) {
+        console.error("AIMLAPI Error:", e);
+        alert("⚠️ AIMLAPI did not return a valid list.");
+      }
+    }
+  </script>
+</body>
+</html>
